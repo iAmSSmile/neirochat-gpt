@@ -173,6 +173,20 @@ async def is_allowed(config, update: Update, context: CallbackContext, is_inline
                      f'(id: {user_id}) are not allowed')
     return False
 
+
+async def is_channel_member(user_id: int, channel_id: int, context: CallbackContext) -> bool:
+    try:
+        chat_member = await context.bot.get_chat_member(channel_id, user_id)
+        return chat_member.status in [ChatMember.OWNER, ChatMember.ADMINISTRATOR, ChatMember.MEMBER]
+    except telegram.error.BadRequest as e:
+        if str(e) == "User not found":
+            return False
+        else:
+            raise e
+    except Exception as e:
+        raise e
+
+
 def is_admin(config, user_id: int, log_no_admin=False) -> bool:
     """
     Checks if the user is the admin of the bot.

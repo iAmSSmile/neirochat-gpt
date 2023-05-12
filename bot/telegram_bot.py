@@ -1,4 +1,5 @@
 from __future__ import annotations
+from textwrap import dedent
 
 import asyncio
 import logging
@@ -6,8 +7,9 @@ import os
 
 from uuid import uuid4
 from telegram import BotCommandScopeAllGroupChats, Update, constants
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultArticle
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResultArticle, KeyboardButton, ReplyKeyboardMarkup
 from telegram import InputTextMessageContent, BotCommand
+from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TimedOut
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, \
     filters, InlineQueryHandler, CallbackQueryHandler, Application, ContextTypes, CallbackContext
@@ -16,7 +18,7 @@ from pydub import AudioSegment
 
 from utils import is_group_chat, get_thread_id, message_text, wrap_with_indicator, split_into_chunks, \
     edit_message_with_retry, get_stream_cutoff_values, is_allowed, get_remaining_budget, is_admin, is_within_budget, \
-    get_reply_to_message_id, add_chat_request_to_usage_tracker, error_handler
+    get_reply_to_message_id, add_chat_request_to_usage_tracker, error_handler, is_channel_member
 from openai_helper import OpenAIHelper, localized_text
 from usage_tracker import UsageTracker
 
@@ -34,40 +36,82 @@ class ChatGPTTelegramBot:
         """
         self.config = config
         self.openai = openai
+        self.channel_id = -1001803104761
         bot_language = self.config['bot_language']
-        self.commands = [
-            BotCommand(command='help', description=localized_text('help_description', bot_language)),
-            BotCommand(command='reset', description=localized_text('reset_description', bot_language)),
-            BotCommand(command='image', description=localized_text('image_description', bot_language)),
-            BotCommand(command='stats', description=localized_text('stats_description', bot_language)),
-            BotCommand(command='resend', description=localized_text('resend_description', bot_language))
-        ]
-        self.group_commands = [BotCommand(
-            command='chat', description=localized_text('chat_description', bot_language)
-        )] + self.commands
+        # self.commands = [
+        #     BotCommand(command='help', description=localized_text('help_description', bot_language)),
+        #     BotCommand(command='reset', description=localized_text('reset_description', bot_language)),
+        #     BotCommand(command='image', description=localized_text('image_description', bot_language)),
+        #     BotCommand(command='stats', description=localized_text('stats_description', bot_language)),
+        #     BotCommand(command='resend', description=localized_text('resend_description', bot_language))
+        # ]
+        # self.group_commands = [BotCommand(
+        #     command='chat', description=localized_text('chat_description', bot_language)
+        # )] + self.commands
         self.disallowed_message = localized_text('disallowed', bot_language)
         self.budget_limit_message = localized_text('budget_limit', bot_language)
+        self.greetings_message = '''*Привет! Я тот самый умный ChatGPT бот, только внутри Telegram 🤖\nПросто начинай писать свой запрос, а я отвечу тебе ✅*\n\nЧто я умею?\nЯ могу отвечать на вопросы, помнить о чем мы переписывались, искать информацию в интернете, переводить тексты на другие языки, писать эссе, предлагать решения для различных проблем, программировать и многое другое. Моя основная функция - помогать людям в их повседневной жизни.'''
         self.usage = {}
         self.last_message = {}
         self.inline_queries_cache = {}
 
-    async def help(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+    async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        user_id = update.message.from_user.id
+        if await self.has_subscription(user_id, context):
+            await update.message.reply_text(self.greetings_message, parse_mode = ParseMode.MARKDOWN, reply_markup=self.keyboard())
+        else:
+            await self.send_subscription_message(update)
+
+    def keyboard(self):
+        help_btn = KeyboardButton(text='🆘 Помощь')
+        new_btn = KeyboardButton(text='💬 Новый диалог')
+        image_btn = KeyboardButton(text='🖼 Создать изображение')
+        buttons = [[ help_btn, new_btn ],[ image_btn ]]
+        return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
+    
+    async def has_subscription(self, user_id, context: ContextTypes.DEFAULT_TYPE):
+        if await is_channel_member(user_id, self.channel_id, context):
+            return True
+        else:
+            return False
+        
+    async def send_subscription_message(self, update: Update) -> None:
+        keyboard = [
+            [InlineKeyboardButton("Подписаться на Neironomikon", url='https://t.me/neironomikon')],
+            [InlineKeyboardButton('✅ Я подписался на канал!', callback_data='check subscription')],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text("Для работы с ботом необходимо подписаться на канал Neironomikon. После подписки нажмите кнопку \"Я подписался\"", reply_markup=reply_markup)
+
+    async def help(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Shows the help menu.
         """
-        commands = self.group_commands if is_group_chat(update) else self.commands
-        commands_description = [f'/{command.command} - {command.description}' for command in commands]
-        bot_language = self.config['bot_language']
-        help_text = (
-                localized_text('help_text', bot_language)[0] +
-                '\n\n' +
-                '\n'.join(commands_description) +
-                '\n\n' +
-                localized_text('help_text', bot_language)[1] +
-                '\n\n' +
-                localized_text('help_text', bot_language)[2]
-        )
-        await update.message.reply_text(help_text, disable_web_page_preview=True)
+        # commands = self.group_commands if is_group_chat(update) else self.commands
+        # commands_description = [f'/{command.command} - {command.description}' for command in commands]
+        # bot_language = self.config['bot_language']
+        # help_text = (
+        #         localized_text('help_text', bot_language)[0] +
+        #         '\n\n' +
+        #         '\n'.join(commands_description) +
+        #         '\n\n' +
+        #         localized_text('help_text', bot_language)[1] +
+        #         '\n\n' +
+        #         localized_text('help_text', bot_language)[2]
+        # )
+        help_text = '''\
+        *Для управления ботом вы можете воспользоваться кнопками клавиатуры или использовать следующие команды:*
+        
+        /help - эта помощь
+        /image - создание изображения
+        /reset - новый диалог
+        '''
+        if update.message:
+            await update.message.reply_text(dedent(help_text.strip("\n")), disable_web_page_preview=True, parse_mode = ParseMode.MARKDOWN)
+        elif update.callback_query:
+            query = update.callback_query
+            query.answer()
+            context.bot.send_message(chat_id=query.message.chat_id, text=dedent(help_text.strip("\n")), parse_mode = ParseMode.MARKDOWN)
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -184,7 +228,8 @@ class ChatGPTTelegramBot:
         self.openai.reset_chat_history(chat_id=chat_id, content=reset_content)
         await update.effective_message.reply_text(
             message_thread_id=get_thread_id(update),
-            text=localized_text('reset_done', self.config['bot_language'])
+            text='🧹 Готово, можете начинать новый диалог!'
+            # text=localized_text('reset_done', self.config['bot_language'])
         )
 
     async def image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -235,6 +280,15 @@ class ChatGPTTelegramBot:
         """
         Transcribe audio messages.
         """
+        if update.edited_message or not update.message or update.message.via_bot:
+            return
+        
+        user_id = update.message.from_user.id
+        
+        if not await self.has_subscription(user_id, context):
+            await self.send_subscription_message(update)
+            return
+        
         if not self.config['enable_transcription'] or not await self.check_allowed_and_within_budget(update, context):
             return
 
@@ -351,20 +405,46 @@ class ChatGPTTelegramBot:
 
         await wrap_with_indicator(update, context, _execute, constants.ChatAction.TYPING)
 
+    def test(self, message, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        print (message)
+
     async def prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         React to incoming messages and respond accordingly.
         """
+    
         if update.edited_message or not update.message or update.message.via_bot:
             return
 
+        user_id = update.message.from_user.id
+        
+        if not await self.has_subscription(user_id, context):
+            await self.send_subscription_message(update)
+            return
+        
+        if message_text(update.message) == "🆘 Помощь":
+            await self.help(update, context)
+            return
+        
+        if message_text(update.message) == "💬 Новый диалог":
+            await self.reset(update, context)
+            return
+        
+        if message_text(update.message) == "🖼 Создать изображение":
+            await update.effective_message.reply_text(
+                message_thread_id=get_thread_id(update),
+                text='Пожалуйста, опишите ваше изображение:'
+            )
+            context.bot.register_next_step_handler(message, self.test, update, context)
+            
+            return
+        
         if not await self.check_allowed_and_within_budget(update, context):
             return
 
         logging.info(
             f'New message received from user {update.message.from_user.name} (id: {update.message.from_user.id})')
         chat_id = update.effective_chat.id
-        user_id = update.message.from_user.id
         prompt = message_text(update.message)
         self.last_message[chat_id] = prompt
 
@@ -482,7 +562,8 @@ class ChatGPTTelegramBot:
                                 reply_to_message_id=get_reply_to_message_id(self.config,
                                                                             update) if index == 0 else None,
                                 text=chunk,
-                                parse_mode=constants.ParseMode.MARKDOWN
+                                parse_mode=constants.ParseMode.MARKDOWN, 
+                                reply_markup=self.keyboard()
                             )
                         except Exception:
                             try:
@@ -559,6 +640,12 @@ class ChatGPTTelegramBot:
         callback_data = update.callback_query.data
         user_id = update.callback_query.from_user.id
         inline_message_id = update.callback_query.inline_message_id
+        if callback_data == "check subscription":
+            if await self.has_subscription(user_id, context):
+                query = update.callback_query
+                await query.answer()
+                await query.edit_message_text(text=self.greetings_message, parse_mode = ParseMode.MARKDOWN, reply_markup=self.keyboard())
+            return
         name = update.callback_query.from_user.name
         callback_data_suffix = "gpt:"
         query = ""
@@ -726,8 +813,9 @@ class ChatGPTTelegramBot:
         """
         Post initialization hook for the bot.
         """
-        await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
-        await application.bot.set_my_commands(self.commands)
+        # await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
+        # await application.bot.set_my_commands(self.commands)
+        await application.bot.set_my_commands([])
 
     def run(self):
         """
@@ -744,7 +832,7 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         application.add_handler(CommandHandler('image', self.image))
-        application.add_handler(CommandHandler('start', self.help))
+        application.add_handler(CommandHandler('start', self.start))
         application.add_handler(CommandHandler('stats', self.stats))
         application.add_handler(CommandHandler('resend', self.resend))
         application.add_handler(CommandHandler(
