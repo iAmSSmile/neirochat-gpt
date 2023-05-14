@@ -11,7 +11,7 @@ from telegram import InlineKeyboardMarkup, InlineKeyboardButton, InlineQueryResu
 from telegram import InputTextMessageContent, BotCommand
 from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TimedOut
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, \
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ConversationHandler, \
     filters, InlineQueryHandler, CallbackQueryHandler, Application, ContextTypes, CallbackContext
 
 from pydub import AudioSegment
@@ -63,10 +63,14 @@ class ChatGPTTelegramBot:
             await self.send_subscription_message(update)
 
     def keyboard(self):
-        help_btn = KeyboardButton(text='🆘 Помощь')
-        new_btn = KeyboardButton(text='💬 Новый диалог')
-        image_btn = KeyboardButton(text='🖼 Создать изображение')
-        buttons = [[ help_btn, new_btn ],[ image_btn ]]
+        buttons = [
+            [
+                KeyboardButton(text='🆘 Помощь'),
+                KeyboardButton(text='💬 Новый диалог')
+            ],[ 
+               KeyboardButton(text='🖼 Создать изображение')
+            ]
+        ]
         return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
     
     async def has_subscription(self, user_id, context: ContextTypes.DEFAULT_TYPE):
@@ -256,7 +260,8 @@ class ChatGPTTelegramBot:
                 image_url, image_size = await self.openai.generate_image(prompt=image_query)
                 await update.effective_message.reply_photo(
                     reply_to_message_id=get_reply_to_message_id(self.config, update),
-                    photo=image_url
+                    photo=image_url,
+                    reply_markup=self.keyboard()
                 )
                 # add image request to users usage tracker
                 user_id = update.message.from_user.id
@@ -275,6 +280,7 @@ class ChatGPTTelegramBot:
                 )
 
         await wrap_with_indicator(update, context, _generate, constants.ChatAction.UPLOAD_PHOTO)
+        return ConversationHandler.END
 
     async def transcribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -405,9 +411,6 @@ class ChatGPTTelegramBot:
 
         await wrap_with_indicator(update, context, _execute, constants.ChatAction.TYPING)
 
-    def test(self, message, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        print (message)
-
     async def prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         React to incoming messages and respond accordingly.
@@ -428,15 +431,6 @@ class ChatGPTTelegramBot:
         
         if message_text(update.message) == "💬 Новый диалог":
             await self.reset(update, context)
-            return
-        
-        if message_text(update.message) == "🖼 Создать изображение":
-            await update.effective_message.reply_text(
-                message_thread_id=get_thread_id(update),
-                text='Пожалуйста, опишите ваше изображение:'
-            )
-            context.bot.register_next_step_handler(message, self.test, update, context)
-            
             return
         
         if not await self.check_allowed_and_within_budget(update, context):
@@ -516,6 +510,7 @@ class ChatGPTTelegramBot:
                                 reply_to_message_id=get_reply_to_message_id(self.config, update),
                                 text=content
                             )
+                            
                         except:
                             continue
 
@@ -571,7 +566,8 @@ class ChatGPTTelegramBot:
                                     message_thread_id=get_thread_id(update),
                                     reply_to_message_id=get_reply_to_message_id(self.config,
                                                                                 update) if index == 0 else None,
-                                    text=chunk
+                                    text=chunk,
+                                    reply_markup=self.keyboard()
                                 )
                             except Exception as exception:
                                 raise exception
@@ -642,9 +638,9 @@ class ChatGPTTelegramBot:
         inline_message_id = update.callback_query.inline_message_id
         if callback_data == "check subscription":
             if await self.has_subscription(user_id, context):
-                query = update.callback_query
-                await query.answer()
-                await query.edit_message_text(text=self.greetings_message, parse_mode = ParseMode.MARKDOWN, reply_markup=self.keyboard())
+                chat_id = update.callback_query.message.chat_id
+                await context.bot.send_message(chat_id = chat_id, text = self.greetings_message, parse_mode = ParseMode.MARKDOWN, reply_markup = self.keyboard())
+
             return
         name = update.callback_query.from_user.name
         callback_data_suffix = "gpt:"
@@ -817,6 +813,14 @@ class ChatGPTTelegramBot:
         # await application.bot.set_my_commands(self.commands)
         await application.bot.set_my_commands([])
 
+    async def ask_image_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text('*Опишите, что вы хотите видеть на изображении:*', parse_mode = ParseMode.MARKDOWN, reply_markup=ReplyKeyboardMarkup([[KeyboardButton(text='❌ Отмена')]], resize_keyboard=True))
+        return 'ASK_IMAGE_PROMPT'
+    
+    async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text("*Создание изображения отменено*", parse_mode = ParseMode.MARKDOWN, reply_markup=self.keyboard())
+        return ConversationHandler.END
+
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
@@ -828,7 +832,15 @@ class ChatGPTTelegramBot:
             .post_init(self.post_init) \
             .concurrent_updates(True) \
             .build()
-
+            
+        imageHandler = ConversationHandler(
+            entry_points=[MessageHandler(filters.Text(["🖼 Создать изображение"]), self.ask_image_prompt)],
+            states={
+                'ASK_IMAGE_PROMPT': [MessageHandler(filters.TEXT & (~filters.Text(["❌ Отмена"])), self.image)],
+            },
+            fallbacks=[MessageHandler(filters.Text(["❌ Отмена"]), self.cancel)]
+        )
+        application.add_handler(imageHandler)
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         application.add_handler(CommandHandler('image', self.image))
