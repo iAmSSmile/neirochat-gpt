@@ -281,6 +281,7 @@ class ChatGPTTelegramBot:
 
         await wrap_with_indicator(update, context, _generate, constants.ChatAction.UPLOAD_PHOTO)
         return ConversationHandler.END
+    
 
     async def transcribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
