@@ -50,7 +50,7 @@ class ChatGPTTelegramBot:
         # )] + self.commands
         self.disallowed_message = localized_text('disallowed', bot_language)
         self.budget_limit_message = localized_text('budget_limit', bot_language)
-        self.greetings_message = '''*Привет! Я тот самый умный ChatGPT бот, только внутри Telegram 🤖\nПросто начинай писать свой запрос, а я отвечу тебе ✅*\n\nЧто я умею?\nЯ могу отвечать на вопросы, помнить о чем мы переписывались, искать информацию в интернете, переводить тексты на другие языки, писать эссе, предлагать решения для различных проблем, программировать и многое другое. Моя основная функция - помогать людям в их повседневной жизни.'''
+        self.greetings_message = '''*Привет! Я тот самый умный ChatGPT бот, только внутри Telegram 🤖\nПросто начинай писать свой запрос, а я отвечу тебе ✅*\n\nЧто я умею?\nЯ могу отвечать на вопросы, помнить о чем мы переписывались, переводить тексты на другие языки, писать эссе, предлагать решения для различных проблем, программировать и многое другое. Моя основная функция - помогать людям в их повседневной жизни.\n\nP.S. А в ближайшее время появится генерация картинок с помощью Midjourney 5.1'''
         self.usage = {}
         self.last_message = {}
         self.inline_queries_cache = {}
@@ -67,8 +67,8 @@ class ChatGPTTelegramBot:
             [
                 KeyboardButton(text='🆘 Помощь'),
                 KeyboardButton(text='💬 Новый диалог')
-            ],[ 
-               KeyboardButton(text='🖼 Создать изображение')
+            # ],[ 
+            #    KeyboardButton(text='🖼 Создать изображение')
             ]
         ]
         return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
@@ -107,8 +107,9 @@ class ChatGPTTelegramBot:
         *Для управления ботом вы можете воспользоваться кнопками клавиатуры или использовать следующие команды:*
         
         /help - эта помощь
-        /image - создание изображения
         /reset - новый диалог
+        
+        P.S. А в ближайшее время появится генерация картинок с помощью Midjourney 5.1
         '''
         if update.message:
             await update.message.reply_text(dedent(help_text.strip("\n")), disable_web_page_preview=True, parse_mode = ParseMode.MARKDOWN)
@@ -844,7 +845,7 @@ class ChatGPTTelegramBot:
         application.add_handler(imageHandler)
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
-        application.add_handler(CommandHandler('image', self.image))
+        # application.add_handler(CommandHandler('image', self.image))
         application.add_handler(CommandHandler('start', self.start))
         application.add_handler(CommandHandler('stats', self.stats))
         application.add_handler(CommandHandler('resend', self.resend))
