@@ -835,13 +835,13 @@ class ChatGPTTelegramBot:
             .concurrent_updates(True) \
             .build()
             
-        imageHandler = ConversationHandler(
-            entry_points=[MessageHandler(filters.Text(["🖼 Создать изображение"]), self.ask_image_prompt)],
-            states={
-                'ASK_IMAGE_PROMPT': [MessageHandler(filters.TEXT & (~filters.Text(["❌ Отмена"])), self.image)],
-            },
-            fallbacks=[MessageHandler(filters.Text(["❌ Отмена"]), self.cancel)]
-        )
+        # imageHandler = ConversationHandler(
+        #     entry_points=[MessageHandler(filters.Text(["🖼 Создать изображение"]), self.ask_image_prompt)],
+        #     states={
+        #         'ASK_IMAGE_PROMPT': [MessageHandler(filters.TEXT & (~filters.Text(["❌ Отмена"])), self.image)],
+        #     },
+        #     fallbacks=[MessageHandler(filters.Text(["❌ Отмена"]), self.cancel)]
+        # )
         application.add_handler(imageHandler)
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
