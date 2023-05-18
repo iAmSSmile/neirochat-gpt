@@ -842,7 +842,7 @@ class ChatGPTTelegramBot:
         #     },
         #     fallbacks=[MessageHandler(filters.Text(["❌ Отмена"]), self.cancel)]
         # )
-        application.add_handler(imageHandler)
+        # application.add_handler(imageHandler)
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         # application.add_handler(CommandHandler('image', self.image))
