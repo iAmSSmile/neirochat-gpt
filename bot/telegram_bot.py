@@ -81,7 +81,7 @@ class ChatGPTTelegramBot:
         
     async def send_subscription_message(self, update: Update) -> None:
         keyboard = [
-            [InlineKeyboardButton("Подписаться на Neironomikon", url='https://t.me/neironomikon')],
+            [InlineKeyboardButton("Подписаться на Neironomikon", url='https://t.me/joinchat/f5Lr1zPCMPAyMWYy')],
             [InlineKeyboardButton('✅ Я подписался на канал!', callback_data='check subscription')],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
